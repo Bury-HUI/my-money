@@ -11,6 +11,8 @@ import datetime as dt
 import json
 import subprocess
 import sys
+import time
+import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent            # .../my-money
@@ -86,6 +88,18 @@ def num(v):
 
 
 def build_payload(path: Path):
+    """读表格。刚保存时文件可能被 WPS/Excel 短暂占用，失败自动重试。"""
+    last = None
+    for i in range(6):
+        try:
+            return _build_payload(path)
+        except (PermissionError, OSError, zipfile.BadZipFile) as e:
+            last = e
+            time.sleep(2)
+    raise SystemExit("读取表格失败（可能正在被 WPS/Excel 占用）：%s" % last)
+
+
+def _build_payload(path: Path):
     import openpyxl
 
     wb = openpyxl.load_workbook(path, data_only=True)
