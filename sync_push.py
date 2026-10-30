@@ -204,13 +204,11 @@ def run_git(args, **kw):
 
 
 def push(payload) -> bool:
-    files = ["data.json", "sync_push.py", "watch_sync.py", "sync-push.bat", "README.md"]
-    files = [f for f in files if (ROOT / f).exists()]
-    run_git(["add"] + files, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    run_git(["add", "-A"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     staged = run_git(["diff", "--cached", "--quiet"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     if staged.returncode == 0:
-        print("数据没有变化，跳过提交。")
+        print("没有需要提交的改动。")
         return True
 
     msg = "update balance data %s" % payload["summary"].get("latest_date", "")

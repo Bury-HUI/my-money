@@ -15,6 +15,18 @@ sys.path.insert(0, str(ROOT))
 import sync_push  # noqa: E402
 
 
+def already_running() -> bool:
+    """同一时间只允许一个监视进程，避免重复推送。"""
+    try:
+        import ctypes
+
+        ERROR_ALREADY_EXISTS = 183
+        ctypes.windll.kernel32.CreateMutexW(None, False, "balance_watch_singleton")
+        return ctypes.windll.kernel32.GetLastError() == ERROR_ALREADY_EXISTS
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def log(text: str) -> None:
     line = "%s %s" % (time.strftime("%Y-%m-%d %H:%M:%S"), text.rstrip())
     try:
@@ -43,6 +55,9 @@ def once() -> bool:
 
 
 def main() -> None:
+    if already_running():
+        log("已有监视进程在运行，本实例退出。")
+        return
     book = sync_push.find_book()
     log("开始监视：%s" % book)
     last = book.stat().st_mtime
