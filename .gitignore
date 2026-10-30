@@ -1,0 +1,4 @@
+token.txt
+xlsx_path.txt
+__pycache__/
+*.pyc
