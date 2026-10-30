@@ -142,17 +142,38 @@ def build_payload(path: Path):
             "filled_count": len(filled),
             "row_count": len(rows),
             "sheet": sheet_name,
-            "generated_at": dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         },
     }
 
 
 # ---------------------------------------------------------------- 导出
+def core(payload: dict) -> str:
+    """去掉时间戳后的指纹，用来判断数据到底有没有变。"""
+    s = {k: v for k, v in payload["summary"].items() if k != "generated_at"}
+    return json.dumps(
+        {"rows": payload["rows"], "summary": s, "account_keys": payload["account_keys"]},
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+
+
 def export(book: Path) -> dict:
     payload = build_payload(book)
-    (ROOT / "data.json").write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    out = ROOT / "data.json"
+
+    if out.exists():
+        try:
+            old = json.loads(out.read_text(encoding="utf-8"))
+            if core(old) == core(payload):
+                s = payload["summary"]
+                print("表格：%s  [%s]" % (book, s["sheet"]))
+                print("数据没有变化（最新 %s / %s 元），data.json 保持原样。" % (s["latest_date"], s["total"]))
+                return old
+        except (json.JSONDecodeError, KeyError):
+            pass
+
+    payload["summary"]["generated_at"] = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    out.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     s = payload["summary"]
     print("表格：%s  [%s]" % (book, s["sheet"]))
     print("导出：data.json  最新日期 %s  全部资产 %s" % (s["latest_date"], s["total"]))
