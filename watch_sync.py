@@ -4,6 +4,7 @@
 由「余额自动同步」开机启动项在后台静默运行，日志写在 sync.log。
 手动调试可以：python watch_sync.py
 """
+import os
 import subprocess
 import sys
 import time
@@ -11,6 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 LOG = ROOT / "sync.log"
+PID = ROOT / "watch.pid"
 sys.path.insert(0, str(ROOT))
 import sync_push  # noqa: E402
 
@@ -58,6 +60,7 @@ def main() -> None:
     if already_running():
         log("已有监视进程在运行，本实例退出。")
         return
+    PID.write_text(str(os.getpid()), encoding="utf-8")
     book = sync_push.find_book()
     log("开始监视：%s" % book)
     last = book.stat().st_mtime

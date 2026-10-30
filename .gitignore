@@ -1,6 +1,7 @@
 token.txt
 xlsx_path.txt
 sync.log
+watch.pid
 .startup_paths.txt
 __pycache__/
 *.pyc
