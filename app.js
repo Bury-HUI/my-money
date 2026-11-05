@@ -63,10 +63,10 @@
   function renderYearSelect(years, current) {
     yearList = years || [];
     els.yearSelect.innerHTML = yearList
-      .map((y) => {
-        const tag = y === current ? "（今年）" : "";
-        return `<option value="${y}"${y === year ? " selected" : ""}>${y} 年${tag}</option>`;
-      })
+      .map(
+        (y) =>
+          `<option value="${y}"${y === year ? " selected" : ""}>${y} 年</option>`
+      )
       .join("");
   }
 
