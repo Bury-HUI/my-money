@@ -118,6 +118,7 @@ def _build_payload(path: Path):
     account_keys = [h for h in header[1:-2] if h]
 
     rows = []
+    prev_total = None  # 上一条已填写的记录的总额，用于兜底计算「消费」
     for r in range(2, ws.max_row + 1):
         raw_date = ws.cell(r, 1).value
         if raw_date is None or str(raw_date).strip() == "":
@@ -130,8 +131,11 @@ def _build_payload(path: Path):
         if empty:
             total = None
             spend = None
-        elif total is None:
-            total = round(sum(v for v in accounts.values() if v is not None), 2)
+        else:
+            if total is None:  # 公式还没被 WPS/Excel 重算过时，按各账户之和兜底
+                total = round(sum(v for v in accounts.values() if v is not None), 2)
+            if spend is None and prev_total is not None:  # 消费 = 上次总额 - 本次总额
+                spend = round(prev_total - total, 2)
 
         rows.append(
             {
@@ -143,6 +147,8 @@ def _build_payload(path: Path):
                 "spend": spend,
             }
         )
+        if not empty:
+            prev_total = total
 
     filled = [x for x in rows if not x["empty"]]
     if not filled:
