@@ -22,7 +22,7 @@
     emptyHint: document.getElementById("emptyHint"),
     searchInput: document.getElementById("searchInput"),
     btnRefresh: document.getElementById("btnRefresh"),
-    yearTabs: document.getElementById("yearTabs"),
+    yearSelect: document.getElementById("yearSelect"),
     toast: document.getElementById("toast"),
   };
 
@@ -60,20 +60,18 @@
     return state?.account_keys || Object.keys(ACCOUNT_META);
   }
 
-  function renderYearTabs(years, current) {
+  function renderYearSelect(years, current) {
     yearList = years || [];
-    els.yearTabs.innerHTML = yearList
-      .map(
-        (y) =>
-          `<button class="year-tab${y === year ? " active" : ""}" data-year="${y}">${y}</button>`
-      )
+    els.yearSelect.innerHTML = yearList
+      .map((y) => {
+        const tag = y === current ? "（今年）" : "";
+        return `<option value="${y}"${y === year ? " selected" : ""}>${y} 年${tag}</option>`;
+      })
       .join("");
   }
 
-  els.yearTabs.addEventListener("click", (e) => {
-    const btn = e.target.closest(".year-tab");
-    if (!btn) return;
-    const y = parseInt(btn.dataset.year, 10);
+  els.yearSelect.addEventListener("change", () => {
+    const y = parseInt(els.yearSelect.value, 10);
     if (!y || y === year) return;
     year = y;
     try {
@@ -94,7 +92,7 @@
           : yearList.includes(manifest.current) ? manifest.current
           : yearList[0];
       }
-      renderYearTabs(yearList, manifest.current);
+      renderYearSelect(yearList, manifest.current);
       await loadYear();
     } catch (e) {
       els.syncLine.textContent = "加载失败，请刷新";

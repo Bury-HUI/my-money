@@ -526,17 +526,14 @@ body {
   .field-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
-/* —— 年份切换 —— */
-.year-tabs {
-  display: flex; gap: 4px; align-items: center;
-  background: var(--card); border: 1px solid var(--line);
-  border-radius: 12px; padding: 4px;
+/* —— 年份下拉 —— */
+.year-select {
+  appearance: none; -webkit-appearance: none;
+  background: var(--card) url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23888' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 10px center;
+  border: 1px solid var(--line); border-radius: 12px;
+  color: var(--ink); font: inherit; font-size: 13px; font-weight: 600;
+  padding: 7px 30px 7px 14px; cursor: pointer; outline: none;
+  transition: border-color 0.15s;
 }
-.year-tab {
-  border: none; background: transparent; cursor: pointer;
-  font: inherit; font-size: 13px; font-weight: 600;
-  color: var(--ink-3); padding: 6px 12px; border-radius: 9px;
-  transition: color 0.15s, background 0.15s;
-}
-.year-tab:hover { color: var(--ink-2); }
-.year-tab.active { background: var(--accent-soft); color: var(--accent-2); }
+.year-select:hover { border-color: var(--accent, #4a8); }
+.year-select:focus { border-color: var(--accent, #4a8); }
