@@ -22,10 +22,13 @@
     emptyHint: document.getElementById("emptyHint"),
     searchInput: document.getElementById("searchInput"),
     btnRefresh: document.getElementById("btnRefresh"),
+    yearTabs: document.getElementById("yearTabs"),
     toast: document.getElementById("toast"),
   };
 
   let state = null;
+  let year = null;
+  let yearList = [];
   let lastKey = "";
   let toastTimer = null;
 
@@ -57,6 +60,65 @@
     return state?.account_keys || Object.keys(ACCOUNT_META);
   }
 
+  function renderYearTabs(years, current) {
+    yearList = years || [];
+    els.yearTabs.innerHTML = yearList
+      .map(
+        (y) =>
+          `<button class="year-tab${y === year ? " active" : ""}" data-year="${y}">${y}</button>`
+      )
+      .join("");
+  }
+
+  els.yearTabs.addEventListener("click", (e) => {
+    const btn = e.target.closest(".year-tab");
+    if (!btn) return;
+    const y = parseInt(btn.dataset.year, 10);
+    if (!y || y === year) return;
+    year = y;
+    try {
+      localStorage.setItem("balanceYear", String(y));
+    } catch (err) { /* 隐私模式下忽略 */ }
+    loadYear();
+  });
+
+  async function load() {
+    try {
+      els.syncLine.textContent = "同步中…";
+      const res = await fetch("./years.json?t=" + Date.now());
+      const manifest = await res.json();
+      yearList = manifest.years || [];
+      const saved = parseInt(localStorage.getItem("balanceYear"), 10);
+      if (!year || !yearList.includes(year)) {
+        year = yearList.includes(saved) ? saved
+          : yearList.includes(manifest.current) ? manifest.current
+          : yearList[0];
+      }
+      renderYearTabs(yearList, manifest.current);
+      await loadYear();
+    } catch (e) {
+      els.syncLine.textContent = "加载失败，请刷新";
+      showToast("无法读取数据文件");
+    }
+  }
+
+  async function loadYear() {
+    try {
+      els.syncLine.textContent = `${year} 年 · 同步中…`;
+      const res = await fetch(`./data-${year}.json?t=` + Date.now());
+      if (!res.ok) throw new Error("http " + res.status);
+      state = await res.json();
+      lastKey = "";
+      render();
+      els.syncLine.textContent =
+        `${year} 年 · 来自表格 · ` +
+        new Date().toLocaleTimeString("zh-CN", { hour12: false });
+    } catch (e) {
+      els.syncLine.textContent = "加载失败，请刷新";
+      showToast(`无法读取 ${year} 年数据`);
+    }
+  }
+
   function parseDateKey(s) {
     const m = String(s || "").trim().match(/^(\d+)\.(\d+)$/);
     if (!m) return -1;
@@ -86,9 +148,10 @@
 
   function renderSummary() {
     const s = state.summary || {};
-    els.latestDate.textContent = s.latest_date ? `· ${s.latest_date}` : "";
-    els.totalValue.textContent = `¥ ${money(s.total ?? 0)}`;
-    els.weekSpend.textContent = `¥ ${money(s.week_spend ?? 0)}`;
+    const y = s.year || year;
+    els.latestDate.textContent = s.latest_date ? `· ${y} · ${s.latest_date}` : `· ${y || ""}`;
+    els.totalValue.textContent = `¥ ${money(s.total)}`;
+    els.weekSpend.textContent = `¥ ${money(s.week_spend)}`;
     els.filledCount.textContent = `${s.filled_count ?? 0} 天`;
     const accounts = s.accounts || {};
     els.accountGrid.innerHTML = accountKeys()
@@ -96,7 +159,7 @@
         const meta = metaOf(k);
         return `<article class="account-chip" style="--dot:${meta.color}">
           <p class="name">${meta.short}</p>
-          <p class="val">¥ ${money(accounts[k] ?? 0)}</p>
+          <p class="val">¥ ${money(accounts[k])}</p>
         </article>`;
       })
       .join("");
@@ -105,7 +168,9 @@
   function renderRows() {
     const rows = visibleRows();
     const latestRow = state?.summary?.latest_row;
+    const yearEmpty = (state?.summary?.filled_count ?? 0) === 0;
     els.emptyHint.hidden = rows.length > 0;
+    els.emptyHint.textContent = yearEmpty ? "这一年还没有记录" : "没有匹配的记录";
 
     els.ledgerBody.innerHTML = rows
       .map((r) => {
@@ -165,27 +230,14 @@
     }
   }
 
-  async function load() {
-    try {
-      els.syncLine.textContent = "同步中…";
-      const res = await fetch("./data.json?t=" + Date.now());
-      const data = await res.json();
-      state = data;
-      render();
-      els.syncLine.textContent =
-        "来自表格 · " +
-        new Date().toLocaleTimeString("zh-CN", { hour12: false });
-    } catch (e) {
-      els.syncLine.textContent = "加载失败，请刷新";
-      showToast("无法读取 data.json");
-    }
-  }
-
   els.searchInput.addEventListener("input", () => {
     lastKey = "";
     render();
   });
-  els.btnRefresh.addEventListener("click", load);
+  els.btnRefresh.addEventListener("click", () => {
+    if (year) loadYear();
+    else load();
+  });
 
   load();
 })();

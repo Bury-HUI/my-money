@@ -525,3 +525,18 @@ body {
 @media (min-width: 480px) and (max-width: 719px) {
   .field-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* —— 年份切换 —— */
+.year-tabs {
+  display: flex; gap: 4px; align-items: center;
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: 12px; padding: 4px;
+}
+.year-tab {
+  border: none; background: transparent; cursor: pointer;
+  font: inherit; font-size: 13px; font-weight: 600;
+  color: var(--ink-3); padding: 6px 12px; border-radius: 9px;
+  transition: color 0.15s, background 0.15s;
+}
+.year-tab:hover { color: var(--ink-2); }
+.year-tab.active { background: var(--accent-soft); color: var(--accent-2); }

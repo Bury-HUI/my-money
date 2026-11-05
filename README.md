@@ -5,8 +5,12 @@
 ## 数据链路
 
 ```
-余额.xlsx --(保存)--> watch_sync.py --> data.json --> git push --> GitHub Pages --> 网页
+余额.xlsx --(保存)--> watch_sync.py --> data-<年份>.json --> git push --> GitHub Pages --> 网页
 ```
+
+- 每年一张工作表（表名 = 年份，如 2026、2027），每年导出一个 `data-<年份>.json`
+- `years.json` 记录有哪些年份，网页右上角可以**切换年份**
+- `data.json` 始终等于当年数据，兼容旧链接
 
 ## 日常使用：什么都不用做
 

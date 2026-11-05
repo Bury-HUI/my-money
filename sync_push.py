@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
-"""把《余额.xlsx》导出成 data.json 并推送到 GitHub Pages。
+"""把《余额.xlsx》导出成 data-<年份>.json 并推送到 GitHub Pages。
+
+每年一张工作表（表名 = 年份，如 2026、2027），每年一个数据文件，
+网页上可以切换年份。data.json 始终指向当年，兼容旧链接。
 
 自包含版本：不再依赖外部 server.py，直接在仓库目录里运行即可。
     python sync_push.py            # 导出 + 推送
@@ -66,18 +69,10 @@ def ensure_openpyxl():
         subprocess.run([sys.executable, "-m", "pip", "install", "-q", "openpyxl"], check=False)
 
 
-def pick_sheet(wb):
-    want = str(dt.date.today().year)
-    if want in wb.sheetnames:
-        return wb[want], want
-    best, score = None, -1
-    for ws in wb.worksheets:
-        n = sum(1 for row in ws.iter_rows(min_row=2, max_col=1, values_only=True) if row[0])
-        if n > score:
-            best, score = ws, n
-    if best is None:
-        raise SystemExit("表格里没有可用工作表")
-    return best, best.title
+def sheet_year(name: str):
+    """表名是四位数字才算年份表。"""
+    n = str(name).strip()
+    return int(n) if n.isdigit() and len(n) == 4 else None
 
 
 def date_text(v) -> str:
@@ -107,71 +102,94 @@ def build_payload(path: Path):
     raise SystemExit("读取表格失败（可能正在被 WPS/Excel 占用）：%s" % last)
 
 
-def _build_payload(path: Path):
+def _build_payload(path: Path) -> dict:
+    """返回 {年份: payload}。只导出：有数据的年份表 + 今年（哪怕还没填）。"""
     import openpyxl
 
     wb = openpyxl.load_workbook(path, data_only=True)
-    ws, sheet_name = pick_sheet(wb)
+    this_year = dt.date.today().year
+    payloads = {}
 
-    header = [ws.cell(1, c).value for c in range(1, ws.max_column + 1)]
-    header = [str(h).strip() if h is not None else "" for h in header]
-    account_keys = [h for h in header[1:-2] if h]
-
-    rows = []
-    prev_total = None  # 上一条已填写的记录的总额，用于兜底计算「消费」
-    for r in range(2, ws.max_row + 1):
-        raw_date = ws.cell(r, 1).value
-        if raw_date is None or str(raw_date).strip() == "":
+    for name in wb.sheetnames:
+        year = sheet_year(name)
+        if year is None:
             continue
-        accounts = {key: num(ws.cell(r, 2 + i).value) for i, key in enumerate(account_keys)}
-        total = num(ws.cell(r, 2 + len(account_keys)).value)
-        spend = num(ws.cell(r, 3 + len(account_keys)).value)
+        ws = wb[name]
 
-        empty = all(v is None for v in accounts.values())
-        if empty:
-            total = None
-            spend = None
-        else:
-            if total is None:  # 公式还没被 WPS/Excel 重算过时，按各账户之和兜底
-                total = round(sum(v for v in accounts.values() if v is not None), 2)
-            if spend is None and prev_total is not None:  # 消费 = 上次总额 - 本次总额
-                spend = round(prev_total - total, 2)
+        header = [ws.cell(1, c).value for c in range(1, ws.max_column + 1)]
+        header = [str(h).strip() if h is not None else "" for h in header]
+        account_keys = [h for h in header[1:-2] if h]
 
-        rows.append(
-            {
-                "row": r,
-                "date": date_text(raw_date),
-                "accounts": accounts,
-                "total": total,
-                "empty": empty,
-                "spend": spend,
+        rows = []
+        prev_total = None  # 上一条已填写的记录的总额，用于兜底计算「消费」
+        for r in range(2, ws.max_row + 1):
+            raw_date = ws.cell(r, 1).value
+            if raw_date is None or str(raw_date).strip() == "":
+                continue
+            accounts = {key: num(ws.cell(r, 2 + i).value) for i, key in enumerate(account_keys)}
+            total = num(ws.cell(r, 2 + len(account_keys)).value)
+            spend = num(ws.cell(r, 3 + len(account_keys)).value)
+
+            empty = all(v is None for v in accounts.values())
+            if empty:
+                total = None
+                spend = None
+            else:
+                if total is None:  # 公式还没被 WPS/Excel 重算过时，按各账户之和兜底
+                    total = round(sum(v for v in accounts.values() if v is not None), 2)
+                if spend is None and prev_total is not None:  # 消费 = 上次总额 - 本次总额
+                    spend = round(prev_total - total, 2)
+
+            rows.append(
+                {
+                    "row": r,
+                    "date": date_text(raw_date),
+                    "accounts": accounts,
+                    "total": total,
+                    "empty": empty,
+                    "spend": spend,
+                }
+            )
+            if not empty:
+                prev_total = total
+
+        filled = [x for x in rows if not x["empty"]]
+        if not filled and year < this_year:
+            continue  # 过去的空年份表不导出；今年和未来年份即使没填也导出（网页能切过去看）
+        if filled:
+            latest = filled[-1]
+            week = [x["spend"] for x in filled[-7:] if x["spend"] is not None]
+            summary = {
+                "latest_date": latest["date"],
+                "latest_row": latest["row"],
+                "total": latest["total"],
+                "accounts": latest["accounts"],
+                "week_spend": round(sum(week), 2) if week else 0,
+                "filled_count": len(filled),
+                "row_count": len(rows),
             }
-        )
-        if not empty:
-            prev_total = total
+        else:
+            summary = {
+                "latest_date": None,
+                "latest_row": None,
+                "total": None,
+                "accounts": {},
+                "week_spend": None,
+                "filled_count": 0,
+                "row_count": len(rows),
+            }
+        summary.update({"sheet": name, "year": year})
 
-    filled = [x for x in rows if not x["empty"]]
-    if not filled:
-        raise SystemExit("表格里还没有任何已填写的记录")
+        payloads[year] = {
+            "headers": header,
+            "account_keys": account_keys,
+            "rows": rows,
+            "summary": summary,
+        }
 
-    latest = filled[-1]
-    week = [x["spend"] for x in filled[-7:] if x["spend"] is not None]
-
-    return {
-        "headers": header,
-        "account_keys": account_keys,
-        "rows": rows,
-        "summary": {
-            "latest_date": latest["date"],
-            "latest_row": latest["row"],
-            "total": latest["total"],
-            "accounts": latest["accounts"],
-            "week_spend": round(sum(week), 2) if week else 0,
-            "filled_count": len(filled),
-            "row_count": len(rows),
-            "sheet": sheet_name,
-        },
-    }
+    if not payloads:
+        raise SystemExit("表格里没有可导出的年份工作表（表名需为 2026、2027 这样的四位数）")
+    return payloads
 
 
 # ---------------------------------------------------------------- 导出
@@ -185,27 +203,51 @@ def core(payload: dict) -> str:
     )
 
 
-def export(book: Path) -> dict:
-    payload = build_payload(book)
-    out = ROOT / "data.json"
-
+def _write_if_changed(fname: str, payload: dict) -> bool:
+    """内容有变才写文件，避免无意义的提交。返回是否真的写了。"""
+    out = ROOT / fname
     if out.exists():
         try:
-            old = json.loads(out.read_text(encoding="utf-8"))
-            if core(old) == core(payload):
-                s = payload["summary"]
-                print("表格：%s  [%s]" % (book, s["sheet"]))
-                print("数据没有变化（最新 %s / %s 元），data.json 保持原样。" % (s["latest_date"], s["total"]))
-                return old
+            if core(json.loads(out.read_text(encoding="utf-8"))) == core(payload):
+                return False
         except (json.JSONDecodeError, KeyError):
             pass
-
     payload["summary"]["generated_at"] = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     out.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    s = payload["summary"]
-    print("表格：%s  [%s]" % (book, s["sheet"]))
-    print("导出：data.json  最新日期 %s  全部资产 %s" % (s["latest_date"], s["total"]))
-    return payload
+    return True
+
+
+def export(book: Path) -> tuple[bool, str]:
+    payloads = build_payload(book)
+    this_year = dt.date.today().year
+    years = sorted(payloads.keys(), reverse=True)
+    current = this_year if this_year in payloads else years[0]
+
+    changed = []
+    for y in years:
+        if _write_if_changed("data-%d.json" % y, payloads[y]):
+            changed.append(y)
+    (ROOT / "years.json").write_text(
+        json.dumps({"years": years, "current": current}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    # data.json = 当年数据，兼容旧链接
+    if _write_if_changed("data.json", payloads[current]):
+        changed.append("data.json")
+
+    s = payloads[current]["summary"]
+    if s["filled_count"]:
+        line = "当年 [%s] 最新 %s / %s 元" % (s["sheet"], s["latest_date"], s["total"])
+    else:
+        line = "当年 [%s] 还没有记录" % s["sheet"]
+    if changed:
+        print("表格：%s" % book)
+        print("导出更新：%s（%s）" % (", ".join(map(str, changed)), line))
+    else:
+        print("数据没有变化（%s）。" % line)
+    latest = payloads[max(years)]["summary"]
+    msg = latest["latest_date"] if latest["filled_count"] else str(max(years))
+    return bool(changed), msg
 
 
 # ---------------------------------------------------------------- 推送
@@ -217,7 +259,7 @@ def run_git(args, **kw):
     )
 
 
-def push(payload) -> bool:
+def push(changed: bool, msg_date: str) -> bool:
     run_git(["add", "-A"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     staged = run_git(["diff", "--cached", "--quiet"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -225,7 +267,7 @@ def push(payload) -> bool:
         print("没有需要提交的改动。")
         return True
 
-    msg = "update balance data %s" % payload["summary"].get("latest_date", "")
+    msg = "update balance data %s" % msg_date
     commit = run_git(["commit", "-m", msg], capture_output=True)
     if commit.returncode != 0:
         print("提交失败：", (commit.stderr or "").strip()[:300])
@@ -258,10 +300,10 @@ def push(payload) -> bool:
 def main() -> int:
     ensure_openpyxl()
     book = find_book()
-    payload = export(book)
+    changed, msg_date = export(book)
     if "--no-push" in sys.argv:
         return 0
-    return 0 if push(payload) else 1
+    return 0 if push(changed, msg_date) else 1
 
 
 if __name__ == "__main__":
