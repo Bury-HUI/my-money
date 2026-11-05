@@ -42,6 +42,7 @@ def log(text: str) -> None:
 
 
 def once() -> bool:
+    env = dict(os.environ, PYTHONIOENCODING="utf-8")
     r = subprocess.run(
         [sys.executable, str(ROOT / "sync_push.py")],
         cwd=str(ROOT),
@@ -49,6 +50,7 @@ def once() -> bool:
         text=True,
         encoding="utf-8",
         errors="replace",
+        env=env,
     )
     out = ((r.stdout or "") + (r.stderr or "")).strip()
     ok = r.returncode == 0

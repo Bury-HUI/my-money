@@ -19,6 +19,14 @@ ROOT = Path(__file__).resolve().parent            # .../my-money
 BRANCH = "main"
 BOOK = "余额.xlsx"
 
+# pythonw / 重定向环境下 stdout 编码不稳，统一按 UTF-8 输出，坏字符用替换兜底
+for _s in (sys.stdout, sys.stderr):
+    if _s is not None:
+        try:
+            _s.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:  # noqa: BLE001
+            pass
+
 # 可能的表格位置（按优先级）
 CANDIDATES = [
     ROOT.parent / BOOK,                            # 仓库旁边（推荐布局）
